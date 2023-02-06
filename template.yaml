@@ -1,0 +1,582 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+  
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Runtime: nodejs14.x
+    Timeout: 40
+    Tags: 
+      DepartmentName: Information Technology
+      ProjectName: MY AUTH SUPER APP
+      ApplicationName: SuperApp
+      Environment: !If [IsProd, "Production", !Ref NodeEnv]
+
+Resources:
+  LambdaFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      FunctionName: !If 
+        - IsCIDeployment
+        - !Sub "${FunctionName}-${NodeEnv}"
+        - !Ref AWS::NoValue
+      Handler: index.handler
+      CodeUri: ./src
+      AutoPublishAlias: !Ref Alias
+      DeploymentPreference:
+        Type: !Ref DeploymentType
+      Description: Authentication API V2
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: nodejs14.x
+      Architectures: [ 
+        arm64
+      ]
+      MemorySize: 128
+      Environment:
+        Variables:
+          TokenSecret: !Join ["", ["{{resolve:secretsmanager:", !Ref NodeEnv, "/steve/secrets:SecretString:TokenSecret}}"]]
+          steveAppsApiToken: !Join ["", ["{{resolve:secretsmanager:", !Ref NodeEnv, "/steve/secrets:SecretString:steveAppsApiToken}}"]]
+          NodeEnv: !Ref NodeEnv   
+          BaseUrl: !Ref BaseUrl   
+          MailSender: !Join ["", ["{{resolve:ssm:/", !Ref NodeEnv ,"/steve/MailSender}}"]]   
+          SiteName: !Join ["", ["{{resolve:ssm:/", !Ref NodeEnv ,"/steve/SiteName}}"]]       
+          SingleDynamoTable: !If [IsProd, !Join ["-", ["steve", "steve-db", !Ref NodeEnv]], !Join ["-", ["steve", "steve-db", "develop"]]]
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: !Ref DeploymentType
+      Layers:
+        - !Ref LambdaFunctionLayer
+      Tracing: Active
+      Events:
+        Login:
+          Type: Api
+          Properties:
+            Path: /login
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        Logout:
+          Type: Api
+          Properties:
+            Path: /logout
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        FacebookNative:
+          Type: Api
+          Properties:
+            Path: /facebook/native
+            Method: POST
+            RestApiId: !Ref AuthV2Api  
+        GoogleNative:
+          Type: Api
+          Properties:
+            Path: /google/native
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        AppleNative:
+          Type: Api
+          Properties:
+            Path: /apple/native
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        AppleWebnonios:
+          Type: Api
+          Properties:
+            Path: /apple/webnonios
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SignupPhone:
+          Type: Api
+          Properties:
+            Path: /signup/phone
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SignupPhoneVerify:
+          Type: Api
+          Properties:
+            Path: /signup/phone/verify
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SignupPhoneUserInfo:
+          Type: Api
+          Properties:
+            Path: /signup/phone/userinfo
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SignupEmail:
+          Type: Api
+          Properties:
+            Path: /signup/email
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SignupEmailVerify:
+          Type: Api
+          Properties:
+            Path: /signup/email/verify
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SignupEmailUserInfo:
+          Type: Api
+          Properties:
+            Path: /signup/email/userinfo
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SigninReset:
+          Type: Api
+          Properties:
+            Path: /signin/reset
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SigninResetVerify:
+          Type: Api
+          Properties:
+            Path: /signin/reset/verify
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        SigninResetUpdate:
+          Type: Api
+          Properties:
+            Path: /signin/reset/update
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        ProfileName:
+          Type: Api
+          Properties:
+            Path: /profile/name
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        ProfileEmail:
+          Type: Api
+          Properties:
+            Path: /profile/email
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        ProfileMobile:
+          Type: Api
+          Properties:
+            Path: /profile/mobile
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        ProfileCredential:
+          Type: Api
+          Properties:
+            Path: /profile/credential
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        ProfileEmailVerify:
+          Type: Api
+          Properties:
+            Path: /profile/email/verify
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        ProfileMobileVerify:
+          Type: Api
+          Properties:
+            Path: /profile/mobile/verify
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        ProfileDelete:
+          Type: Api
+          Properties:
+            Path: /profile/delete
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        FacebookNativeCheck:
+          Type: Api
+          Properties:
+            Path: /facebook/native/check
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        GoogleNativeCheck:
+          Type: Api
+          Properties:
+            Path: /google/native/check
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+        AppleNativeCheck:
+          Type: Api
+          Properties:
+            Path: /apple/native/check
+            Method: POST
+            RestApiId: !Ref AuthV2Api
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt LambdaSecurityGroup.GroupId
+        SubnetIds: !FindInMap [EnvironmentMap, !Ref NodeEnv, SubnetIds]
+
+  AuthV2Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !If 
+        - IsCIDeployment
+        - !Sub "${FunctionName}-api-${NodeEnv}"
+        - !Ref AWS::NoValue
+      Cors:
+        AllowOrigin: "'*'"
+        AllowMethods: "'POST, GET, OPTIONS'"
+        AllowHeaders: "'Authorization, Content-Type'"
+      StageName: !Ref NodeEnv
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+      TracingEnabled: true
+      MethodSettings:
+        - HttpMethod: "*"
+          ResourcePath: "/*"
+          LoggingLevel: !If [
+              IsProd,
+              ERROR,
+              INFO,
+            ]
+          DataTraceEnabled: true
+          MetricsEnabled: true
+
+  ApiWAafAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${AuthV2Api}/stages/${NodeEnv}"
+      WebACLArn: !FindInMap [EnvironmentMap, !Ref NodeEnv, WafArn]
+    DependsOn:
+      - AuthV2ApiStage
+
+  ApiCustomDomainPathMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    DependsOn: "AuthV2ApiStage"
+    Properties:
+      DomainName: !Sub
+        - "${ApiDomain}.${Domain}"
+        - {
+            "ApiDomain":
+              !If [IsProd, "api", !Join ["", ["api.steve-", !Ref NodeEnv]]],
+            "Domain": !FindInMap [EnvironmentMap, !Ref NodeEnv, Domain],
+          }
+      BasePath: "authv2"
+      RestApiId: !Ref AuthV2Api
+      Stage: !Ref NodeEnv      
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: !Sub "${FunctionName}-${NodeEnv} Security Group ID" 
+      SecurityGroupIngress: 
+        - CidrIp: !FindInMap [EnvironmentMap, !Ref NodeEnv, PrivateIPRange]
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - CidrIp: !FindInMap [EnvironmentMap, !Ref NodeEnv, PrivateIPRange]
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+      VpcId: !FindInMap [EnvironmentMap, !Ref NodeEnv, Vpc]
+              
+  LambdaFunctionLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub 
+        - ${FunctionName}-${NodeEnv}-dependencies
+        - {
+            "FunctionName": !Ref FunctionName
+          }
+      Description: !Join [" ", ["Dependencies", "for", !Ref FunctionName]]
+      ContentUri: layers/
+
+  CloudWatchLambdaLogsGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn:
+      - LambdaFunction
+    Properties:
+      LogGroupName:
+        !Join ["", ["/aws/lambda/", !Sub "${AWS::StackName}"]]
+      RetentionInDays: 90
+
+  CloudWatchLambdaLogsStream:
+    Type: AWS::Logs::LogStream
+    DependsOn:
+      - CloudWatchLambdaLogsGroup
+    Properties:
+      LogGroupName: !Ref CloudWatchLambdaLogsGroup
+      LogStreamName: !Sub "${AWS::StackName}-log-stream"
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"      
+      Policies:
+        - PolicyName: "LambdaFunctionPolicy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - ec2:CreateNetworkInterface
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DetachNetworkInterface
+              - ec2:DeleteNetworkInterface
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - ses:SendEmail
+              - ses:SendRawEmail
+              Resource: "*"
+        - PolicyName: "LambdaDynamoDBPolicy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - dynamodb:BatchGetItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchWriteItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem  
+              - dynamodb:DeleteItem
+              Resource: 
+                - !Join 
+                  - ""
+                  - 
+                    - "arn:aws:dynamodb:"
+                    - !Ref AWS::Region
+                    - ":"
+                    - !Ref AWS::AccountId
+                    - ":table/"
+                    - !If [IsProd, !Join ["-", ["steve", "*", !Ref NodeEnv]], !Join ["-", ["steve", "*", "develop"]]]
+                - !Join 
+                  - ""
+                  - 
+                    - "arn:aws:dynamodb:"
+                    - !Ref AWS::Region
+                    - ":"
+                    - !Ref AWS::AccountId
+                    - ":table/"
+                    - !If [IsProd, !Join ["-", ["steve", "*", !Ref NodeEnv]], !Join ["-", ["steve", "*", "develop"]]]
+                    - "/index/*"
+
+  FunctionApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: apigateway.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonApiGatewayPushToCloudWatchLogs
+
+  AuthApiAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt FunctionApiRole.Arn
+
+  CriticalSnsTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        DisplayName: !Sub "${FunctionName}-${NodeEnv}"
+
+  PagerDutySubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !FindInMap [EnvironmentMap, !Ref NodeEnv, PagerDutyIntegration]
+      Protocol: https
+      TopicArn: !Ref CriticalSnsTopic
+
+  LambdaCriticalErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmDescription: !Sub "Lambda Critical Error Alarm for ${FunctionName}-${NodeEnv}"
+      AlarmActions:
+        - !Ref CriticalSnsTopic
+      OKActions:
+        - !Ref CriticalSnsTopic
+      MetricName: "Errors"
+      Namespace: "AWS/Lambda"
+      Statistic: "Average"
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub "${FunctionName}-${NodeEnv}"
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 25
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  LambdaThrottlesCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmDescription: !Sub "Lambda Throttles Count Alarm for ${FunctionName}-${NodeEnv}"
+      AlarmActions:
+        - !Ref CriticalSnsTopic
+      OKActions:
+        - !Ref CriticalSnsTopic
+      MetricName: "Throttles"
+      Namespace: "AWS/Lambda"
+      Statistic: "Sum"
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub "${FunctionName}-${NodeEnv}"
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  LambdaDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmDescription: !Sub "Lambda Duration Average Alarm for ${FunctionName}-${NodeEnv}"
+      AlarmActions:
+        - !Ref CriticalSnsTopic
+      OKActions:
+        - !Ref CriticalSnsTopic
+      MetricName: "Duration"
+      Namespace: "AWS/Lambda"
+      Statistic: "Average"
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub "${FunctionName}-${NodeEnv}"
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: !FindInMap [EnvironmentMap, !Ref NodeEnv, LambdaDurationMsThreshold]
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  LambdaInvocationsCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmDescription: !Sub "Lambda Invocations Count Alarm for ${FunctionName}-${NodeEnv}"
+      AlarmActions:
+        - !Ref CriticalSnsTopic
+      OKActions:
+        - !Ref CriticalSnsTopic
+      MetricName: "Invocations"
+      Namespace: "AWS/Lambda"
+      Statistic: "Average"
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub "${FunctionName}-${NodeEnv}"
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 500
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Parameters:
+  FunctionName:
+    Type: String
+    Default: steve-auth-api-v2
+  NodeEnv:
+    Type: String
+    AllowedValues: [local, develop, sat, production]
+    Default: develop
+  DynamoDbNamePrefix:
+    Type: String
+    Default: "steve"
+  CIEnvironment:
+    Type: String
+    Default: "true"
+    AllowedValues:
+      [
+        "true",
+        "false"
+      ]
+    Description: "Disable for manual deployment"
+  Alias:
+    Type: String
+    Default: live
+  BaseUrl:
+    Type: String
+    Default: ""
+  MailSender:
+    Type: String
+    Default: "" 
+  SiteName:  
+    Type: String
+    Default: "Steve Auth App"
+  DeploymentType:
+    Type: String
+    Default: AllAtOnce
+    AllowedValues:
+      [
+        Canary10Percent30Minutes,
+        Canary10Percent5Minutes,
+        Canary10Percent10Minutes,
+        Canary10Percent15Minutes,
+        Linear10PercentEvery10Minutes,
+        Linear10PercentEvery1Minute,
+        Linear10PercentEvery2Minutes,
+        Linear10PercentEvery3Minutes,
+        AllAtOnce,
+      ]
+Mappings:
+  EnvironmentMap:
+    local:
+      Domain: steve.torrefranca.com
+      SubnetIds:
+        [
+          subnet-0812e8dbd4a59f133, 
+        ]
+      PrivateIPRange: 210.0.20.0/22
+      Vpc: vpc-0e45567b235346456756
+      LambdaDurationMsThreshold: 2000
+      WafArn: arn:aws:wafv2:ap-southeast-1:0e45567b235346456756:regional/webacl/egr-api-testing-acl/033665b2-6870-4bb2-8e43-7121635d864a
+      PagerDutyIntegration: https://events.pagerduty.com/integration/4507493bc85f4f03d0b57fed5a26467b/enqueue
+    develop:
+      Domain: steve.torrefranca.com
+      SubnetIds:
+        [
+          subnet-0812e8dbd4a59f133
+        ]
+      PrivateIPRange: 210.0.20.0/22
+      Vpc: vpc-0e45567b235346456756
+      LambdaDurationMsThreshold: 2000
+      WafArn: arn:aws:wafv2:ap-southeast-1:0e45567b235346456756:regional/webacl/egr-api-testing-acl/033665b2-6870-4bb2-8e43-7121635d864a
+      PagerDutyIntegration: https://events.pagerduty.com/integration/4507493bc85f4f03d0b57fed5a26467b/enqueue
+    sat:
+      Domain: steve.torrefranca.com 
+      SubnetIds:
+        [
+          subnet-0812e8dbd4a59f133
+        ]
+      PrivateIPRange: 210.0.20.0/22
+      Vpc: vpc-0e45567b235346456756
+      LambdaDurationMsThreshold: 2000
+      WafArn: arn:aws:wafv2:ap-southeast-1:0e45567b235346456756:regional/webacl/egr-api-testing-acl/033665b2-6870-4bb2-8e43-7121635d864a
+      PagerDutyIntegration: https://events.pagerduty.com/integration/7c8b5aea98344203c05b10a41d86634b/enqueue
+    production:
+      Domain: steve.torrefranca.com
+      SubnetIds: [
+        "subnet-0e45567b235346456756"
+      ]
+
+Conditions:
+  IsProd: !Equals [!Ref NodeEnv, production]
+  IsCIBuild: !Equals 
+    - !Ref CIEnvironment
+    - true
+  IsCIEnvironment: !Or
+    - !Equals [!Ref NodeEnv, develop]
+    - !Equals [!Ref NodeEnv, sat]
+    - !Condition IsProd
+  IsCIDeployment: !And
+    - !Condition IsCIBuild
+    - !Condition IsCIEnvironment

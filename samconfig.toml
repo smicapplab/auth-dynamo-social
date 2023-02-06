@@ -1,0 +1,30 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+[develop.deploy.parameters]
+resolve_s3 = true
+s3_prefix = "steve-auth-api"
+region = "ap-southeast-1"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+confirm_changeset = false
+disable_rollback = true
+
+[sat.deploy.parameters]
+resolve_s3 = true
+s3_prefix = "steve-auth-api"
+region = "ap-southeast-1"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+confirm_changeset = false
+disable_rollback = true
+
+[production.deploy.parameters]
+resolve_s3 = true
+s3_prefix = "steve-auth-api"
+region = "ap-southeast-1"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+confirm_changeset = false
+disable_rollback = true

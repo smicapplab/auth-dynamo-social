@@ -1,0 +1,16 @@
+{
+  "name": "steve-auth-api",
+  "description": "Auth V2",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "PROPRIETARY",
+  "private": true,
+  "scripts": {
+    "pre-build": "echo \"Info: no pre-build specified\"",
+    "post-build": "echo \"Info: no post-build test specified\"",
+    "build": "echo \"Info: no build specified\"",
+    "watch": "echo \"Info: no watch specified\"",
+    "start": "node src/index.js"
+  },
+  "dependencies": {}
+}
